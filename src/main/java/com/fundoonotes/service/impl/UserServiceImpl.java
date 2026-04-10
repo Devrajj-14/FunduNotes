@@ -8,7 +8,9 @@ import com.fundoonotes.entity.User;
 import com.fundoonotes.exception.InvalidCredentialsException;
 import com.fundoonotes.exception.UserAlreadyExistsException;
 import com.fundoonotes.exception.UserNotFoundException;
+import com.fundoonotes.dto.event.UserRegistrationEvent;
 import com.fundoonotes.mapper.EntityDtoMapper;
+import com.fundoonotes.messaging.producer.EventPublisher;
 import com.fundoonotes.repository.UserRepository;
 import com.fundoonotes.security.JwtUtil;
 import com.fundoonotes.service.UserService;
@@ -29,6 +31,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
+    private final EventPublisher eventPublisher;
 
     @Override
     public UserResponseDto register(UserRegisterRequestDto dto) {
@@ -50,6 +53,14 @@ public class UserServiceImpl implements UserService {
 
         User savedUser = userRepository.save(user);
         log.info("User registered successfully with id: {}", savedUser.getId());
+
+        // Publish registration event for async welcome notification
+        eventPublisher.publishUserRegistration(UserRegistrationEvent.builder()
+                .userId(savedUser.getId())
+                .email(savedUser.getEmail())
+                .firstName(savedUser.getFirstName())
+                .timestamp(savedUser.getRegisteredAt())
+                .build());
 
         return EntityDtoMapper.toUserResponseDto(savedUser);
     }

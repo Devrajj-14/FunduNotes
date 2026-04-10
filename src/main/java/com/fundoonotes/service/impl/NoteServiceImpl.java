@@ -2,12 +2,14 @@ package com.fundoonotes.service.impl;
 
 import com.fundoonotes.dto.request.NoteRequestDto;
 import com.fundoonotes.dto.response.NoteResponseDto;
+import com.fundoonotes.dto.event.NoteActivityEvent;
 import com.fundoonotes.entity.Note;
 import com.fundoonotes.entity.User;
 import com.fundoonotes.exception.NoteNotFoundException;
 import com.fundoonotes.exception.UnauthorizedAccessException;
 import com.fundoonotes.exception.UserNotFoundException;
 import com.fundoonotes.mapper.EntityDtoMapper;
+import com.fundoonotes.messaging.producer.EventPublisher;
 import com.fundoonotes.repository.NoteRepository;
 import com.fundoonotes.repository.UserRepository;
 import com.fundoonotes.security.JwtUtil;
@@ -16,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -31,6 +34,7 @@ public class NoteServiceImpl implements NoteService {
     private final NoteRepository noteRepository;
     private final UserRepository userRepository;
     private final JwtUtil jwtUtil;
+    private final EventPublisher eventPublisher;
 
     @Override
     public NoteResponseDto createNote(NoteRequestDto dto, String token) {
@@ -62,6 +66,7 @@ public class NoteServiceImpl implements NoteService {
         note.setPinned(true);
         Note saved = noteRepository.save(note);
         log.info("Note pinned: noteId={}", noteId);
+        publishNoteActivity(noteId, saved.getUser().getId(), "PIN");
         return EntityDtoMapper.toNoteResponseDto(saved);
     }
 
@@ -80,6 +85,7 @@ public class NoteServiceImpl implements NoteService {
         note.setArchived(true);
         Note saved = noteRepository.save(note);
         log.info("Note archived: noteId={}", noteId);
+        publishNoteActivity(noteId, saved.getUser().getId(), "ARCHIVE");
         return EntityDtoMapper.toNoteResponseDto(saved);
     }
 
@@ -98,6 +104,7 @@ public class NoteServiceImpl implements NoteService {
         note.setTrashed(true);
         Note saved = noteRepository.save(note);
         log.info("Note trashed: noteId={}", noteId);
+        publishNoteActivity(noteId, saved.getUser().getId(), "TRASH");
         return EntityDtoMapper.toNoteResponseDto(saved);
     }
 
@@ -164,5 +171,17 @@ public class NoteServiceImpl implements NoteService {
         }
 
         return note;
+    }
+
+    /**
+     * Publish a note activity audit event to RabbitMQ.
+     */
+    private void publishNoteActivity(Long noteId, Long userId, String action) {
+        eventPublisher.publishNoteActivity(NoteActivityEvent.builder()
+                .noteId(noteId)
+                .userId(userId)
+                .action(action)
+                .timestamp(LocalDateTime.now())
+                .build());
     }
 }
