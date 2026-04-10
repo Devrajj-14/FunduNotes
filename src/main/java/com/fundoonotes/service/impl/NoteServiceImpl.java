@@ -12,7 +12,7 @@ import com.fundoonotes.mapper.EntityDtoMapper;
 import com.fundoonotes.messaging.producer.EventPublisher;
 import com.fundoonotes.repository.NoteRepository;
 import com.fundoonotes.repository.UserRepository;
-import com.fundoonotes.security.JwtUtil;
+import com.fundoonotes.security.TokenValidationService;
 import com.fundoonotes.service.NoteService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,7 +33,7 @@ public class NoteServiceImpl implements NoteService {
 
     private final NoteRepository noteRepository;
     private final UserRepository userRepository;
-    private final JwtUtil jwtUtil;
+    private final TokenValidationService tokenValidationService;
     private final EventPublisher eventPublisher;
 
     @Override
@@ -122,21 +122,11 @@ public class NoteServiceImpl implements NoteService {
     // =========================================================================
 
     /**
-     * Extract userId from token and validate the token.
-     * Throws UnauthorizedAccessException if token is invalid.
+     * Validate token and extract userId via TokenValidationService.
+     * Delegates all auth logic to the security boundary.
      */
     private Long extractAndValidateUserId(String token) {
-        if (token == null || token.isBlank()) {
-            log.warn("Missing or empty authorization token");
-            throw new UnauthorizedAccessException("Authorization token is required");
-        }
-
-        if (!jwtUtil.validateToken(token)) {
-            log.warn("Invalid or expired authorization token");
-            throw new UnauthorizedAccessException("Invalid or expired token");
-        }
-
-        return jwtUtil.extractUserId(token);
+        return tokenValidationService.validateAndExtractUserId(token);
     }
 
     /**
