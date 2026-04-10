@@ -16,6 +16,8 @@ import com.fundoonotes.security.TokenValidationService;
 import com.fundoonotes.service.NoteService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -25,6 +27,11 @@ import java.util.stream.Collectors;
 /**
  * Implementation of NoteService.
  * Handles note CRUD and state transitions with ownership validation.
+ *
+ * Caching strategy:
+ * - Public methods keep the String token signature (no Part 1 API drift)
+ * - Internal methods with Long userId are where @Cacheable/@CacheEvict apply
+ * - Mutations evict the user's cache; reads populate it
  */
 @Slf4j
 @Service
@@ -36,28 +43,21 @@ public class NoteServiceImpl implements NoteService {
     private final TokenValidationService tokenValidationService;
     private final EventPublisher eventPublisher;
 
+    // =========================================================================
+    // Public API methods — Part 1 signatures preserved
+    // =========================================================================
+
     @Override
     public NoteResponseDto createNote(NoteRequestDto dto, String token) {
         Long userId = extractAndValidateUserId(token);
         User user = findUserById(userId);
-
-        Note note = EntityDtoMapper.toNoteEntity(dto, user);
-        Note savedNote = noteRepository.save(note);
-
-        log.info("Note created with id: {} for userId: {}", savedNote.getId(), userId);
-        return EntityDtoMapper.toNoteResponseDto(savedNote);
+        return createNoteForUser(dto, user, userId);
     }
 
     @Override
     public List<NoteResponseDto> getAllNotes(String token) {
         Long userId = extractAndValidateUserId(token);
-
-        List<Note> notes = noteRepository.findByUserId(userId);
-        log.info("Retrieved {} notes for userId: {}", notes.size(), userId);
-
-        return notes.stream()
-                .map(EntityDtoMapper::toNoteResponseDto)
-                .collect(Collectors.toList());
+        return getAllNotesByUserId(userId);
     }
 
     @Override
@@ -65,8 +65,10 @@ public class NoteServiceImpl implements NoteService {
         Note note = getAuthorizedNote(noteId, token);
         note.setPinned(true);
         Note saved = noteRepository.save(note);
+        Long userId = saved.getUser().getId();
         log.info("Note pinned: noteId={}", noteId);
-        publishNoteActivity(noteId, saved.getUser().getId(), "PIN");
+        publishNoteActivity(noteId, userId, "PIN");
+        evictUserNotesCache(userId);
         return EntityDtoMapper.toNoteResponseDto(saved);
     }
 
@@ -75,7 +77,9 @@ public class NoteServiceImpl implements NoteService {
         Note note = getAuthorizedNote(noteId, token);
         note.setPinned(false);
         Note saved = noteRepository.save(note);
+        Long userId = saved.getUser().getId();
         log.info("Note unpinned: noteId={}", noteId);
+        evictUserNotesCache(userId);
         return EntityDtoMapper.toNoteResponseDto(saved);
     }
 
@@ -84,8 +88,10 @@ public class NoteServiceImpl implements NoteService {
         Note note = getAuthorizedNote(noteId, token);
         note.setArchived(true);
         Note saved = noteRepository.save(note);
+        Long userId = saved.getUser().getId();
         log.info("Note archived: noteId={}", noteId);
-        publishNoteActivity(noteId, saved.getUser().getId(), "ARCHIVE");
+        publishNoteActivity(noteId, userId, "ARCHIVE");
+        evictUserNotesCache(userId);
         return EntityDtoMapper.toNoteResponseDto(saved);
     }
 
@@ -94,7 +100,9 @@ public class NoteServiceImpl implements NoteService {
         Note note = getAuthorizedNote(noteId, token);
         note.setArchived(false);
         Note saved = noteRepository.save(note);
+        Long userId = saved.getUser().getId();
         log.info("Note unarchived: noteId={}", noteId);
+        evictUserNotesCache(userId);
         return EntityDtoMapper.toNoteResponseDto(saved);
     }
 
@@ -103,8 +111,10 @@ public class NoteServiceImpl implements NoteService {
         Note note = getAuthorizedNote(noteId, token);
         note.setTrashed(true);
         Note saved = noteRepository.save(note);
+        Long userId = saved.getUser().getId();
         log.info("Note trashed: noteId={}", noteId);
-        publishNoteActivity(noteId, saved.getUser().getId(), "TRASH");
+        publishNoteActivity(noteId, userId, "TRASH");
+        evictUserNotesCache(userId);
         return EntityDtoMapper.toNoteResponseDto(saved);
     }
 
@@ -113,8 +123,47 @@ public class NoteServiceImpl implements NoteService {
         Note note = getAuthorizedNote(noteId, token);
         note.setTrashed(false);
         Note saved = noteRepository.save(note);
+        Long userId = saved.getUser().getId();
         log.info("Note restored from trash: noteId={}", noteId);
+        evictUserNotesCache(userId);
         return EntityDtoMapper.toNoteResponseDto(saved);
+    }
+
+    // =========================================================================
+    // Internal cached methods — clean cache keys by userId
+    // =========================================================================
+
+    /**
+     * Get all notes for a user, backed by Redis cache.
+     * Cache key: userNotes::{userId}
+     */
+    @Cacheable(value = "userNotes", key = "#userId")
+    public List<NoteResponseDto> getAllNotesByUserId(Long userId) {
+        List<Note> notes = noteRepository.findByUserId(userId);
+        log.info("Cache MISS — fetched {} notes from DB for userId={}", notes.size(), userId);
+
+        return notes.stream()
+                .map(EntityDtoMapper::toNoteResponseDto)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Create a note and evict the user's cache.
+     */
+    @CacheEvict(value = "userNotes", key = "#userId")
+    public NoteResponseDto createNoteForUser(NoteRequestDto dto, User user, Long userId) {
+        Note note = EntityDtoMapper.toNoteEntity(dto, user);
+        Note savedNote = noteRepository.save(note);
+        log.info("Note created with id={} for userId={} (cache evicted)", savedNote.getId(), userId);
+        return EntityDtoMapper.toNoteResponseDto(savedNote);
+    }
+
+    /**
+     * Evict cache for a specific user (called after mutations).
+     */
+    @CacheEvict(value = "userNotes", key = "#userId")
+    public void evictUserNotesCache(Long userId) {
+        log.debug("Cache evicted for userId={}", userId);
     }
 
     // =========================================================================
