@@ -31,3 +31,9 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Local Configuration ###
+src/main/resources/application-local.properties
+
+### OS Files ###
+.DS_Store
