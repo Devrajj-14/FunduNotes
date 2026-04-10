@@ -1,0 +1,85 @@
+.note-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  transition: box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.note-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.note-card.pinned {
+  border-color: #fbbc04;
+  background: #fffde7;
+}
+
+.note-card-content {
+  flex: 1;
+}
+
+.note-card-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #202124;
+  word-break: break-word;
+}
+
+.note-card-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #5f6368;
+  line-height: 1.4;
+  word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.note-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: #9aa0a6;
+}
+
+.pin-badge {
+  font-size: 0.7rem;
+  background: #fef7e0;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  color: #e37400;
+}
+
+.note-card-actions {
+  display: flex;
+  gap: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.note-card:hover .note-card-actions {
+  opacity: 1;
+}
+
+.note-card-actions button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.35rem;
+  border-radius: 50%;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+  line-height: 1;
+}
+
+.note-card-actions button:hover {
+  background: #f1f3f4;
+}

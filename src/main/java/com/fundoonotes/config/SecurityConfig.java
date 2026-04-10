@@ -9,16 +9,19 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 /**
- * Security configuration for Part 1.
+ * Security configuration.
  *
  * Provides:
  * - PasswordEncoder bean (BCrypt) for secure password storage
+ * - CORS configuration for React frontend (localhost:5173)
  * - Minimal SecurityFilterChain that permits all requests
- *
- * Part 2 will extend this to add JWT authentication filter
- * into the filter chain without rewriting this base configuration.
  */
 @Configuration
 @EnableWebSecurity
@@ -33,15 +36,30 @@ public class SecurityConfig {
     }
 
     /**
+     * CORS configuration for frontend integration.
+     * Allows React dev server (Vite on port 5173) to communicate with backend.
+     */
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(List.of("http://localhost:5173"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+
+    /**
      * Security filter chain configuration.
-     * In Part 1, all endpoints are publicly accessible.
-     * Token validation is handled at the service layer.
-     *
-     * Part 2 will add a JWT filter before UsernamePasswordAuthenticationFilter.
+     * All endpoints are publicly accessible — token validation is at service layer.
      */
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
